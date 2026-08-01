@@ -150,7 +150,7 @@ lzy_write_summary() {
   local modules_json="["
   local first=1
   local m status
-  local order=(system cpu memory disk network route streaming docker wordpress score)
+  local order=(system cpu memory disk network route streaming ipquality docker wordpress score)
   declare -A lzy_sum_seen=()
 
   for m in "${order[@]}"; do

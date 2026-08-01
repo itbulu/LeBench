@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# modules/network/run.sh - speedtest + China ISP ping
+# modules/network/run.sh - speedtest + China ISP ping + 三网下载测速
 
 _lzy_ping_avg() {
   local host="$1"
@@ -8,7 +8,6 @@ _lzy_ping_avg() {
     echo ""
     return 1
   fi
-  # Linux ping: rtt min/avg/max/mdev
   local out
   out="$(ping -c "${count}" -W 3 "${host}" 2>&1)" || true
   echo "${out}" >>"$(lzy_log_file network)"
@@ -18,7 +17,6 @@ _lzy_ping_avg() {
 _lzy_speedtest() {
   local raw=""
   if lzy_require_cmd speedtest; then
-    # Ookla speedtest CLI (prefer JSON)
     if raw="$(speedtest --accept-license --accept-gdpr -f json 2>/dev/null)"; then
       echo "${raw}"
       return 0
@@ -41,6 +39,35 @@ _lzy_speedtest() {
   return 1
 }
 
+# Download speed via curl (bytes/sec -> Mbps). Empty url => skip.
+_lzy_dl_mbps() {
+  local url="$1"
+  local max_time="${LZY_NET_CN_DL_TIMEOUT:-25}"
+  if [[ -z "${url}" ]] || ! lzy_require_cmd curl; then
+    echo ""
+    return 1
+  fi
+  local speed http_code
+  # speed_download is bytes/sec average
+  local out
+  out="$(curl -4 -L -o /dev/null -sS \
+    -w '%{http_code} %{speed_download}' \
+    --connect-timeout 8 \
+    --max-time "${max_time}" \
+    "${url}" 2>/dev/null || echo '000 0')"
+  echo "DL ${url} => ${out}" >>"$(lzy_log_file network)"
+  http_code="$(echo "${out}" | awk '{print $1}')"
+  speed="$(echo "${out}" | awk '{print $2}')"
+  if [[ "${http_code}" != 2* && "${http_code}" != 3* ]]; then
+    echo ""
+    return 1
+  fi
+  awk -v s="${speed:-0}" 'BEGIN{
+    if (s+0 <= 0) { print ""; exit }
+    printf "%.2f", s*8/1000000
+  }'
+}
+
 lzy_module_network() {
   local out="${LZY_RUN_DIR}/network.json"
   lzy_log_info "开始网络测试"
@@ -61,7 +88,6 @@ lzy_module_network() {
         ping_ms="$(echo "${st_raw}" | grep -i Ping | grep -oE '[0-9.]+' | head -1)"
       elif lzy_has_jq && [[ "${st_raw}" == \{* ]]; then
         st_status="ok"
-        # Ookla format
         download_mbps="$(echo "${st_raw}" | jq -r '
           if .download.bandwidth then (.download.bandwidth * 8 / 1000000)
           elif .download then (.download / 1000000)
@@ -78,7 +104,6 @@ lzy_module_network() {
       else
         st_status="ok"
       fi
-      # Persist raw
       printf '%s\n' "${st_raw}" >"${LZY_RUN_DIR}/speedtest_raw.json" 2>/dev/null || true
     else
       st_status="skip"
@@ -93,6 +118,28 @@ lzy_module_network() {
   ping_ct="$(_lzy_ping_avg "${LZY_NET_PING_CT:-}")"
   ping_cu="$(_lzy_ping_avg "${LZY_NET_PING_CU:-}")"
   ping_cm="$(_lzy_ping_avg "${LZY_NET_PING_CM:-}")"
+
+  # China download speed (curl) — configurable mirrors / CDN nodes
+  local cn_ct_mbps="" cn_cu_mbps="" cn_cm_mbps="" cn_intl_mbps=""
+  local url_ct="${LZY_NET_DL_CT_URL:-https://mirrors.cloud.tencent.com/ubuntu/ls-lR.gz}"
+  local url_cu="${LZY_NET_DL_CU_URL:-https://mirrors.aliyun.com/ubuntu/ls-lR.gz}"
+  local url_cm="${LZY_NET_DL_CM_URL:-https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ls-lR.gz}"
+  local url_intl="${LZY_NET_DL_INTL_URL:-https://speed.cloudflare.com/__down?bytes=25000000}"
+
+  if [[ "${LZY_NET_CN_SPEED:-1}" == "1" ]]; then
+    lzy_info "三网 / CDN 下载测速（curl，可配置 URL）"
+    lzy_info "  电信节点: ${url_ct}"
+    cn_ct_mbps="$(_lzy_dl_mbps "${url_ct}" || true)"
+    lzy_info "  联通节点: ${url_cu}"
+    cn_cu_mbps="$(_lzy_dl_mbps "${url_cu}" || true)"
+    lzy_info "  移动节点: ${url_cm}"
+    cn_cm_mbps="$(_lzy_dl_mbps "${url_cm}" || true)"
+    if [[ -n "${url_intl}" ]]; then
+      lzy_info "  国际基准: ${url_intl}"
+      cn_intl_mbps="$(_lzy_dl_mbps "${url_intl}" || true)"
+    fi
+    lzy_info "三网下载 Mbps: CT=${cn_ct_mbps:-n/a} CU=${cn_cu_mbps:-n/a} CM=${cn_cm_mbps:-n/a} INTL=${cn_intl_mbps:-n/a}"
+  fi
 
   cat >"${out}" <<EOF
 {
@@ -117,6 +164,20 @@ lzy_module_network() {
       "unicom": "$(lzy_json_escape "${LZY_NET_PING_CU:-}")",
       "mobile": "$(lzy_json_escape "${LZY_NET_PING_CM:-}")"
     }
+  },
+  "china_download": {
+    "enabled": $( [[ "${LZY_NET_CN_SPEED:-1}" == "1" ]] && echo true || echo false ),
+    "telecom_mbps": $(lzy_json_num_or_null "${cn_ct_mbps}"),
+    "unicom_mbps": $(lzy_json_num_or_null "${cn_cu_mbps}"),
+    "mobile_mbps": $(lzy_json_num_or_null "${cn_cm_mbps}"),
+    "intl_mbps": $(lzy_json_num_or_null "${cn_intl_mbps}"),
+    "urls": {
+      "telecom": "$(lzy_json_escape "${url_ct}")",
+      "unicom": "$(lzy_json_escape "${url_cu}")",
+      "mobile": "$(lzy_json_escape "${url_cm}")",
+      "intl": "$(lzy_json_escape "${url_intl}")"
+    },
+    "note": "curl download average Mbps; override LZY_NET_DL_*_URL for true ISP nodes"
   }
 }
 EOF

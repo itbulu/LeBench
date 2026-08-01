@@ -22,6 +22,7 @@ apt-get install -y \
   iputils-ping \
   traceroute \
   whois \
+  dnsutils \
   lsb-release \
   procps \
   util-linux \

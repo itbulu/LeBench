@@ -100,19 +100,23 @@ _lzy_score_memory() {
 
 _lzy_score_disk() {
   local f="${LZY_RUN_DIR}/disk.json"
-  local sr sw ri wi
+  local sr sw ri wi ddr ddw
   sr="$(_lzy_json_get "${f}" '.sequential.read_mib_s')"
   sw="$(_lzy_json_get "${f}" '.sequential.write_mib_s')"
   ri="$(_lzy_json_get "${f}" '.random.read_iops')"
   wi="$(_lzy_json_get "${f}" '.random.write_iops')"
+  ddr="$(_lzy_json_get "${f}" '.dd.read_mib_s')"
+  ddw="$(_lzy_json_get "${f}" '.dd.write_mib_s')"
   local ref_seq="${LZY_SCORE_REF_DISK_SEQ:-500}"
   local ref_iops="${LZY_SCORE_REF_DISK_IOPS:-20000}"
-  local a b c d n=0 sum=0
+  local a b c d e fsc n=0 sum=0
   a="$(_lzy_ratio_score "${sr}" "${ref_seq}" || true)"
   b="$(_lzy_ratio_score "${sw}" "${ref_seq}" || true)"
   c="$(_lzy_ratio_score "${ri}" "${ref_iops}" || true)"
   d="$(_lzy_ratio_score "${wi}" "${ref_iops}" || true)"
-  for x in "${a}" "${b}" "${c}" "${d}"; do
+  e="$(_lzy_ratio_score "${ddr}" "${ref_seq}" || true)"
+  fsc="$(_lzy_ratio_score "${ddw}" "${ref_seq}" || true)"
+  for x in "${a}" "${b}" "${c}" "${d}" "${e}" "${fsc}"; do
     if [[ -n "${x}" ]]; then
       sum="$(awk -v s="${sum}" -v v="${x}" 'BEGIN{print s+v}')"
       n=$((n + 1))
@@ -127,18 +131,25 @@ _lzy_score_disk() {
 
 _lzy_score_network() {
   local f="${LZY_RUN_DIR}/network.json"
-  local dl ul ping
+  local dl ul ping ct cu cm
   dl="$(_lzy_json_get "${f}" '.speedtest.download_mbps')"
   ul="$(_lzy_json_get "${f}" '.speedtest.upload_mbps')"
   ping="$(_lzy_json_get "${f}" '.speedtest.ping_ms')"
+  ct="$(_lzy_json_get "${f}" '.china_download.telecom_mbps')"
+  cu="$(_lzy_json_get "${f}" '.china_download.unicom_mbps')"
+  cm="$(_lzy_json_get "${f}" '.china_download.mobile_mbps')"
   local ref_dl="${LZY_SCORE_REF_NET_DL:-1000}"
   local ref_ul="${LZY_SCORE_REF_NET_UL:-500}"
   local ref_ping="${LZY_SCORE_REF_NET_PING:-20}"
-  local a b c n=0 sum=0
+  local ref_cn="${LZY_SCORE_REF_NET_CN_DL:-500}"
+  local a b c d e f n=0 sum=0
   a="$(_lzy_ratio_score "${dl}" "${ref_dl}" || true)"
   b="$(_lzy_ratio_score "${ul}" "${ref_ul}" || true)"
   c="$(_lzy_inverse_score "${ping}" "${ref_ping}" || true)"
-  for x in "${a}" "${b}" "${c}"; do
+  d="$(_lzy_ratio_score "${ct}" "${ref_cn}" || true)"
+  e="$(_lzy_ratio_score "${cu}" "${ref_cn}" || true)"
+  f="$(_lzy_ratio_score "${cm}" "${ref_cn}" || true)"
+  for x in "${a}" "${b}" "${c}" "${d}" "${e}" "${f}"; do
     if [[ -n "${x}" ]]; then
       sum="$(awk -v s="${sum}" -v v="${x}" 'BEGIN{print s+v}')"
       n=$((n + 1))
@@ -153,10 +164,15 @@ _lzy_score_network() {
 
 _lzy_score_route() {
   local f="${LZY_RUN_DIR}/route.json"
-  local s
+  local s ipq
   s="$(_lzy_json_get "${f}" '.summary.score')"
-  if [[ -n "${s}" && "${s}" != "null" ]]; then
+  ipq="$(_lzy_json_get "${LZY_RUN_DIR}/ipquality.json" '.summary.score')"
+  if [[ -n "${s}" && "${s}" != "null" && -n "${ipq}" && "${ipq}" != "null" ]]; then
+    awk -v a="${s}" -v b="${ipq}" 'BEGIN{printf "%.1f", (a*0.7+b*0.3)}'
+  elif [[ -n "${s}" && "${s}" != "null" ]]; then
     _lzy_clamp10 "${s}"
+  elif [[ -n "${ipq}" && "${ipq}" != "null" ]]; then
+    _lzy_clamp10 "${ipq}"
   else
     echo ""
   fi

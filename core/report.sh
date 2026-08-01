@@ -37,6 +37,7 @@ lzy_report_markdown() {
     _lzy_report_section "网络" "${run_dir}/network.json"
     _lzy_report_section "线路" "${run_dir}/route.json"
     _lzy_report_section "流媒体" "${run_dir}/streaming.json"
+    _lzy_report_section "IP 质量" "${run_dir}/ipquality.json"
     _lzy_report_section "应用" "${run_dir}/application.json"
     _lzy_report_section "评分" "${run_dir}/score.json"
 
@@ -323,8 +324,88 @@ EOF
   printf '%s\n' "${out}"
 }
 
+lzy_report_text() {
+  local run_dir="${1:-${LZY_RUN_DIR}}"
+  local run_id
+  run_id="$(basename "${run_dir}")"
+  local out_dir="${LZY_REPORTS_DIR}/${run_id}"
+  local out="${out_dir}/summary.txt"
+  local out2="${run_dir}/summary.txt"
+
+  if [[ ! -d "${run_dir}" ]]; then
+    lzy_die "结果目录不存在: ${run_dir}"
+  fi
+  lzy_ensure_dir "${out_dir}"
+
+  _t() {
+    local file="$1" query="$2" fallback="${3:-—}"
+    if [[ -f "${file}" ]] && lzy_has_jq; then
+      local v
+      v="$(jq -r "${query} // empty" "${file}" 2>/dev/null || true)"
+      [[ -z "${v}" || "${v}" == "null" ]] && printf '%s' "${fallback}" || printf '%s' "${v}"
+    else
+      printf '%s' "${fallback}"
+    fi
+  }
+
+  {
+    echo "============================================================"
+    echo " ${LZY_NAME} (${LZY_BRAND})  v${LZY_VERSION}"
+    echo " Once Test, Multiple Output"
+    echo "============================================================"
+    echo "Run ID   : ${run_id}"
+    echo "Generated: $(lzy_now_iso)"
+    echo "Host     : $(_t "${run_dir}/system.json" '.os.hostname')"
+    echo "OS       : $(_t "${run_dir}/system.json" '.os.pretty_name')"
+    echo "CPU      : $(_t "${run_dir}/system.json" '.cpu.model')"
+    echo "------------------------------------------------------------"
+    echo "SCORE"
+    echo "  Overall : $(_t "${run_dir}/score.json" '.overall')"
+    echo "  CPU     : $(_t "${run_dir}/score.json" '.scores.cpu')"
+    echo "  Memory  : $(_t "${run_dir}/score.json" '.scores.memory')"
+    echo "  Disk    : $(_t "${run_dir}/score.json" '.scores.disk')"
+    echo "  Network : $(_t "${run_dir}/score.json" '.scores.network')"
+    echo "  Route   : $(_t "${run_dir}/score.json" '.scores.route')"
+    echo "  App     : $(_t "${run_dir}/score.json" '.scores.application')"
+    echo "------------------------------------------------------------"
+    echo "CPU (sysbench eps)"
+    echo "  single  : $(_t "${run_dir}/cpu.json" '.sysbench.single_eps')"
+    echo "  multi   : $(_t "${run_dir}/cpu.json" '.sysbench.multi_eps')"
+    echo "MEMORY"
+    echo "  read    : $(_t "${run_dir}/memory.json" '.read.mib_per_sec') MiB/s"
+    echo "  write   : $(_t "${run_dir}/memory.json" '.write.mib_per_sec') MiB/s"
+    echo "DISK"
+    echo "  dd wr/rd: $(_t "${run_dir}/disk.json" '.dd.write_mib_s') / $(_t "${run_dir}/disk.json" '.dd.read_mib_s') MiB/s"
+    echo "  fio seq : $(_t "${run_dir}/disk.json" '.sequential.read_mib_s') / $(_t "${run_dir}/disk.json" '.sequential.write_mib_s') MiB/s"
+    echo "  fio iops: $(_t "${run_dir}/disk.json" '.random.read_iops') / $(_t "${run_dir}/disk.json" '.random.write_iops')"
+    echo "NETWORK"
+    echo "  speedtest DL/UL/Ping: $(_t "${run_dir}/network.json" '.speedtest.download_mbps') / $(_t "${run_dir}/network.json" '.speedtest.upload_mbps') / $(_t "${run_dir}/network.json" '.speedtest.ping_ms')"
+    echo "  CN ping CT/CU/CM ms : $(_t "${run_dir}/network.json" '.china_ping.telecom_ms') / $(_t "${run_dir}/network.json" '.china_ping.unicom_ms') / $(_t "${run_dir}/network.json" '.china_ping.mobile_ms')"
+    echo "  CN dl   CT/CU/CM Mbps: $(_t "${run_dir}/network.json" '.china_download.telecom_mbps') / $(_t "${run_dir}/network.json" '.china_download.unicom_mbps') / $(_t "${run_dir}/network.json" '.china_download.mobile_mbps')"
+    echo "  INTL dl Mbps        : $(_t "${run_dir}/network.json" '.china_download.intl_mbps')"
+    echo "ROUTE / IP"
+    echo "  line    : $(_t "${run_dir}/route.json" '.summary.best_guess')"
+    echo "  bw type : $(_t "${run_dir}/route.json" '.bandwidth_type')"
+    echo "  IPQ     : $(_t "${run_dir}/ipquality.json" '.summary.score') ($(_t "${run_dir}/ipquality.json" '.summary.risk'))"
+    echo "  public  : $(_t "${run_dir}/ipquality.json" '.ip' "$(_t "${run_dir}/route.json" '.public_ip')")"
+    echo "STREAMING unlock_score: $(_t "${run_dir}/streaming.json" '.summary.unlock_score')"
+    echo "APP"
+    echo "  nginx/redis/mysql ms: $(_t "${run_dir}/application.json" '.docker.nginx_start_ms') / $(_t "${run_dir}/application.json" '.docker.redis_start_ms') / $(_t "${run_dir}/application.json" '.docker.mysql_start_ms')"
+    echo "  WP deploy/ttfb ms   : $(_t "${run_dir}/application.json" '.wordpress.deploy_ms') / $(_t "${run_dir}/application.json" '.wordpress.ttfb_ms')"
+    echo "------------------------------------------------------------"
+    echo "JSON dir : ${run_dir}"
+    echo "Reports  : ${out_dir}"
+    echo "============================================================"
+  } | tee "${out}" >"${out2}"
+
+  lzy_ok "纯文本摘要: ${out}"
+  lzy_ok "纯文本摘要: ${out2}"
+  printf '%s\n' "${out}"
+}
+
 lzy_report_all() {
   local run_dir="${1:-${LZY_RUN_DIR}}"
   lzy_report_markdown "${run_dir}" >/dev/null
   lzy_report_html "${run_dir}" >/dev/null
+  lzy_report_text "${run_dir}" >/dev/null
 }

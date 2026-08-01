@@ -35,8 +35,9 @@ ${LZY_NAME} (${LZY_BRAND}) v${LZY_VERSION}
   memory             内存测试
   disk               磁盘测试
   network            网络测试
-  route              线路检测（ASN / CN2 / 9929 / CMI）
+  route              线路检测（ASN / CN2 / 9929 / CMI / 带宽类型）
   streaming          流媒体 / AI 解锁检测
+  ipquality          IP 质量（代理/机房/DNSBL/邮件端口）
   docker             Docker：Nginx / Redis / MySQL 启动耗时
   wordpress          WordPress Compose（WP+MariaDB+Redis）部署与 TTFB
   score [run_id]     仅对已有结果重新评分并刷新报告
@@ -47,12 +48,16 @@ ${LZY_NAME} (${LZY_BRAND}) v${LZY_VERSION}
 
 示例:
   sudo ./benchmark.sh
+  sudo ./benchmark.sh ipquality
   sudo ./benchmark.sh docker
   sudo ./benchmark.sh wordpress
   sudo LZY_APP_CLEANUP=0 ./benchmark.sh wordpress
   ./benchmark.sh upload
   ./benchmark.sh report
   ./benchmark.sh version
+
+一键安装:
+  bash <(curl -fsSL https://raw.githubusercontent.com/itbulu/LeBench/main/install-run.sh)
 
 理念: Once Test, Multiple Output
 EOF
@@ -146,7 +151,7 @@ main() {
     all)
       lzy_cmd_run
       ;;
-    system|cpu|memory|disk|network|route|streaming|docker|wordpress)
+    system|cpu|memory|disk|network|route|streaming|ipquality|docker|wordpress)
       lzy_cmd_run "${cmd}"
       ;;
     *)

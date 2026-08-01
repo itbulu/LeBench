@@ -15,8 +15,19 @@
 | Disk | 20% | fio 顺序带宽 + 随机 IOPS |
 | Network | 20% | Speedtest 上下行 + Ping |
 | Route | 10% | 线路启发式分数 |
+| Route | 10% | 线路启发式 + IP 质量（有则 7:3 混合） |
 | Application | 10% | Docker 启动耗时 + WordPress 部署/TTFB |
 | Price | 10% | 环境变量 `LZY_PRICE`（月费 USD）；未设则 N/A |
+
+## IP 质量（借鉴融合怪能力，自研模块）
+
+模块：`ipquality` → `ipquality.json`
+
+- 地理 / ISP / Org / ASN（ip-api）
+- `hosting` / `proxy` / `mobile` → 带宽类型
+- DNSBL（Spamhaus / SpamCop / SORBS，需 dig）
+- 出站 25 / 587 连通性探测
+- `summary.score` 计入 Route 维度加权
 
 ## 应用维度（Phase 3）
 

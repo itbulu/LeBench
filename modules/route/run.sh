@@ -159,6 +159,35 @@ lzy_module_route() {
   quality="${quality_pair%%|*}"
   score="${quality_pair##*|}"
 
+  # Bandwidth type via ip-api (hosting/mobile/proxy) — aligns with ecs-style classification
+  local bw_type="unknown" api_isp="" api_org="" api_hosting="" api_mobile="" api_proxy=""
+  if [[ -n "${public_ip}" ]] && lzy_require_cmd curl; then
+    local api_json
+    api_json="$(curl -4 -fsS --max-time 8 \
+      "http://ip-api.com/json/${public_ip}?fields=status,isp,org,mobile,proxy,hosting" 2>/dev/null || true)"
+    echo "${api_json}" >>"$(lzy_log_file route)"
+    if [[ -n "${api_json}" ]] && lzy_has_jq; then
+      api_isp="$(echo "${api_json}" | jq -r '.isp // empty')"
+      api_org="$(echo "${api_json}" | jq -r '.org // empty')"
+      api_hosting="$(echo "${api_json}" | jq -r '.hosting // empty')"
+      api_mobile="$(echo "${api_json}" | jq -r '.mobile // empty')"
+      api_proxy="$(echo "${api_json}" | jq -r '.proxy // empty')"
+    fi
+    if [[ "${api_hosting}" == "true" ]]; then
+      bw_type="datacenter"
+    elif [[ "${api_mobile}" == "true" ]]; then
+      bw_type="mobile"
+    elif [[ "${api_proxy}" == "true" ]]; then
+      bw_type="proxy_vpn"
+    elif echo "${api_org} ${api_isp} ${org}" | grep -qiE 'cloud|vps|hosting|datacenter|digitalocean|linode|vultr|aws|azure|hetzner|ovh|contabo'; then
+      bw_type="datacenter"
+    elif echo "${api_org} ${api_isp} ${org}" | grep -qiE 'telecom|unicom|mobile|broadband|residential|comcast|verizon'; then
+      bw_type="isp_residential"
+    elif [[ -n "${api_isp}${api_org}${org}" ]]; then
+      bw_type="isp_or_business"
+    fi
+  fi
+
   # Persist truncated traces
   mkdir -p "${LZY_RUN_DIR}/traces"
   printf '%s\n' "${trace_ct}" >"${LZY_RUN_DIR}/traces/ct.txt"
@@ -176,6 +205,14 @@ lzy_module_route() {
     "org": "$(lzy_json_escape "${org}")",
     "label": "$(lzy_json_escape "${asn_label}")"
   },
+  "bandwidth_type": "$(lzy_json_escape "${bw_type}")",
+  "ip_api": {
+    "isp": "$(lzy_json_escape "${api_isp}")",
+    "org": "$(lzy_json_escape "${api_org}")",
+    "hosting": "$(lzy_json_escape "${api_hosting}")",
+    "mobile": "$(lzy_json_escape "${api_mobile}")",
+    "proxy": "$(lzy_json_escape "${api_proxy}")"
+  },
   "return_path": {
     "telecom": {
       "target": "$(lzy_json_escape "${t_ct}")",
@@ -192,13 +229,14 @@ lzy_module_route() {
   },
   "summary": {
     "best_guess": "$(lzy_json_escape "${quality}")",
+    "bandwidth_type": "$(lzy_json_escape "${bw_type}")",
     "score": $(lzy_json_num_or_null "${score}"),
-    "notes": "Heuristic ASN/traceroute detection; not a guarantee of peering quality."
+    "notes": "Heuristic ASN/traceroute + bandwidth type; not a guarantee of peering quality."
   }
 }
 EOF
 
-  lzy_info "线路推断: ${quality} (score=${score})"
+  lzy_info "线路推断: ${quality} / 带宽类型: ${bw_type} (score=${score})"
   lzy_info "已写入 ${out}"
   return 0
 }

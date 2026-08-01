@@ -140,6 +140,69 @@ _lzy_check_tiktok() {
   fi
 }
 
+_lzy_check_youtube() {
+  local code body
+  code="$(_lzy_curl_code 'https://www.youtube.com' -L)"
+  body="$(_lzy_curl_body)"
+  if [[ "${code}" == "000" ]]; then
+    _lzy_stream_result "YouTube" "fail" "connection failed"
+    return
+  fi
+  if echo "${body}" | grep -qiE 'not available|unusual traffic|consent\.youtube'; then
+    # consent page still means reachable
+    if echo "${body}" | grep -qiE 'not available in your country|is not available'; then
+      _lzy_stream_result "YouTube" "no" "geo restricted"
+    else
+      _lzy_stream_result "YouTube" "yes" "http ${code}"
+    fi
+  elif [[ "${code}" == 2* || "${code}" == 3* ]]; then
+    _lzy_stream_result "YouTube" "yes" "http ${code}"
+  else
+    _lzy_stream_result "YouTube" "unknown" "http ${code}"
+  fi
+}
+
+_lzy_check_twitter() {
+  local code body
+  code="$(_lzy_curl_code 'https://twitter.com' -L)"
+  body="$(_lzy_curl_body)"
+  if [[ "${code}" == "000" ]]; then
+    code="$(_lzy_curl_code 'https://x.com' -L)"
+    body="$(_lzy_curl_body)"
+  fi
+  if [[ "${code}" == "000" ]]; then
+    _lzy_stream_result "Twitter/X" "fail" "connection failed"
+    return
+  fi
+  if [[ "${code}" == "403" ]] || echo "${body}" | grep -qiE 'not available|has been blocked'; then
+    _lzy_stream_result "Twitter/X" "no" "restricted"
+  elif [[ "${code}" == 2* || "${code}" == 3* ]]; then
+    _lzy_stream_result "Twitter/X" "yes" "http ${code}"
+  else
+    _lzy_stream_result "Twitter/X" "unknown" "http ${code}"
+  fi
+}
+
+_lzy_check_chatgpt_api() {
+  # OpenAI geo via chatgpt CDN/api hint
+  local code body
+  code="$(_lzy_curl_code 'https://ios.chat.openai.com/cdn-cgi/trace')"
+  body="$(_lzy_curl_body)"
+  if [[ "${code}" == "000" ]]; then
+    _lzy_stream_result "ChatGPT-Trace" "fail" "connection failed"
+    return
+  fi
+  local loc
+  loc="$(echo "${body}" | awk -F= '/^loc=/{print $2; exit}')"
+  if [[ -n "${loc}" ]]; then
+    _lzy_stream_result "ChatGPT-Trace" "yes" "loc=${loc}"
+  elif [[ "${code}" == 2* ]]; then
+    _lzy_stream_result "ChatGPT-Trace" "yes" "http ${code}"
+  else
+    _lzy_stream_result "ChatGPT-Trace" "unknown" "http ${code}"
+  fi
+}
+
 lzy_module_streaming() {
   local out="${LZY_RUN_DIR}/streaming.json"
   lzy_log_info "开始流媒体 / AI 解锁检测"
@@ -160,7 +223,7 @@ EOF
   local line name status detail
   local yes=0 no=0 fail=0 unknown=0 total=0
 
-  lzy_info "检测 Netflix / Disney+ / OpenAI / Claude / Gemini / TikTok"
+  lzy_info "检测 Netflix / Disney+ / YouTube / OpenAI / Claude / Gemini / TikTok / X / ChatGPT-Trace"
   while IFS=$'\t' read -r name status detail; do
     [[ -z "${name}" ]] && continue
     results+=("${name}|${status}|${detail}")
@@ -175,10 +238,13 @@ EOF
   done < <(
     _lzy_check_netflix
     _lzy_check_disney
+    _lzy_check_youtube
     _lzy_check_openai
     _lzy_check_claude
     _lzy_check_gemini
     _lzy_check_tiktok
+    _lzy_check_twitter
+    _lzy_check_chatgpt_api
   )
 
   # Build JSON services array
