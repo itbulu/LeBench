@@ -2,13 +2,16 @@
 
 **品牌**：LeZaiYun（乐在云）  
 **版本**：1.3.0-platform（Phase 4）  
-**理念**：Once Test, Multiple Output — 一次测试，多种输出。
+**理念**：Once Test, Multiple Output — 一次测试，多种输出。  
+**仓库**：[https://github.com/itbulu/LeBench](https://github.com/itbulu/LeBench)
 
 Linux CLI 评测 + Platform（Dashboard / API / 排行榜 / 多机对比）。
 
 ## 快速开始（CLI）
 
 ```bash
+git clone https://github.com/itbulu/LeBench.git
+cd LeBench
 sudo ./install.sh
 sudo ./benchmark.sh
 ```
