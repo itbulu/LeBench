@@ -87,16 +87,6 @@ _lzy_html_escape() {
   printf '%s' "${s}"
 }
 
-_lzy_html_metric_card() {
-  local label="$1" value="$2"
-  cat <<EOF
-<div class="card">
-  <div class="label">$(_lzy_html_escape "${label}")</div>
-  <div class="value">$(_lzy_html_escape "${value}")</div>
-</div>
-EOF
-}
-
 _lzy_jq_or() {
   local file="$1" query="$2" fallback="${3:-—}"
   if [[ -f "${file}" ]] && lzy_has_jq; then
@@ -110,6 +100,63 @@ _lzy_jq_or() {
   else
     printf '%s' "${fallback}"
   fi
+}
+
+_lzy_html_metric_card() {
+  local label="$1" value="$2"
+  cat <<EOF
+<div class="card">
+  <div class="label">$(_lzy_html_escape "${label}")</div>
+  <div class="value">$(_lzy_html_escape "${value}")</div>
+</div>
+EOF
+}
+
+_lzy_html_kv_row() {
+  local k="$1" v="$2"
+  printf '<tr><th>%s</th><td>%s</td></tr>\n' \
+    "$(_lzy_html_escape "${k}")" "$(_lzy_html_escape "${v}")"
+}
+
+_lzy_html_module_status() {
+  local file="$1"
+  if [[ ! -f "${file}" ]]; then
+    echo "未执行"
+    return
+  fi
+  _lzy_jq_or "${file}" '.status' 'unknown'
+}
+
+_lzy_html_pretty_json() {
+  local file="$1"
+  if [[ ! -f "${file}" ]]; then
+    echo "<p class=\"muted\">无数据文件。</p>"
+    return 0
+  fi
+  local pretty
+  if lzy_has_jq; then
+    pretty="$(jq '.' "${file}" 2>/dev/null || cat "${file}")"
+  else
+    pretty="$(cat "${file}")"
+  fi
+  printf '<pre class="json">%s</pre>\n' "$(_lzy_html_escape "${pretty}")"
+}
+
+_lzy_html_section_open() {
+  local id="$1" title="$2" file="$3"
+  local st
+  st="$(_lzy_html_module_status "${file}")"
+  cat <<EOF
+<section id="${id}" class="mod">
+  <h2>${title} <span class="badge">$(_lzy_html_escape "${st}")</span></h2>
+EOF
+}
+
+_lzy_html_section_close() {
+  local file="$1"
+  echo "<details class=\"raw\"><summary>原始 JSON</summary>"
+  _lzy_html_pretty_json "${file}"
+  echo "</details></section>"
 }
 
 lzy_report_html() {
@@ -130,41 +177,315 @@ lzy_report_html() {
   os="$(_lzy_jq_or "${run_dir}/system.json" '.os.pretty_name')"
   cpu_model="$(_lzy_jq_or "${run_dir}/system.json" '.cpu.model')"
 
-  local cpu_s mem_s disk_s net_s route_s app_s
+  local cpu_s mem_s disk_s net_s route_s app_s price_s
   cpu_s="$(_lzy_jq_or "${run_dir}/score.json" '.scores.cpu')"
   mem_s="$(_lzy_jq_or "${run_dir}/score.json" '.scores.memory')"
   disk_s="$(_lzy_jq_or "${run_dir}/score.json" '.scores.disk')"
   net_s="$(_lzy_jq_or "${run_dir}/score.json" '.scores.network')"
   route_s="$(_lzy_jq_or "${run_dir}/score.json" '.scores.route')"
   app_s="$(_lzy_jq_or "${run_dir}/score.json" '.scores.application')"
-
-  local dl ul ping route_guess unlock
-  dl="$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.download_mbps')"
-  ul="$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.upload_mbps')"
-  ping="$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.ping_ms')"
-  route_guess="$(_lzy_jq_or "${run_dir}/route.json" '.summary.best_guess')"
-  unlock="$(_lzy_jq_or "${run_dir}/streaming.json" '.summary.unlock_score')"
-
-  local cpu_multi mem_read disk_seq
-  cpu_multi="$(_lzy_jq_or "${run_dir}/cpu.json" '.sysbench.multi_eps')"
-  mem_read="$(_lzy_jq_or "${run_dir}/memory.json" '.read.mib_per_sec')"
-  disk_seq="$(_lzy_jq_or "${run_dir}/disk.json" '.sequential.read_mib_s')"
-
-  local nginx_ms redis_ms mysql_ms wp_deploy wp_ttfb
-  nginx_ms="$(_lzy_jq_or "${run_dir}/application.json" '.docker.nginx_start_ms')"
-  redis_ms="$(_lzy_jq_or "${run_dir}/application.json" '.docker.redis_start_ms')"
-  mysql_ms="$(_lzy_jq_or "${run_dir}/application.json" '.docker.mysql_start_ms')"
-  wp_deploy="$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.deploy_ms')"
-  wp_ttfb="$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.ttfb_ms')"
+  price_s="$(_lzy_jq_or "${run_dir}/score.json" '.scores.price')"
 
   local services_rows=""
   if [[ -f "${run_dir}/streaming.json" ]] && lzy_has_jq; then
-    services_rows="$(jq -r '.services[]? | "<tr><td>"+.name+"</td><td class=\"st-"+.status+"\">"+.status+"</td><td>"+.detail+"</td></tr>"' \
+    services_rows="$(jq -r '.services[]? | "<tr><td>"+.name+"</td><td class=\"st-"+.status+"\">"+.status+"</td><td>"+(.detail|tostring)+"</td></tr>"' \
       "${run_dir}/streaming.json" 2>/dev/null || true)"
+  fi
+
+  local dnsbl_rows=""
+  if [[ -f "${run_dir}/ipquality.json" ]] && lzy_has_jq; then
+    dnsbl_rows="$(jq -r '.dnsbl.zones[]? | "<tr><td>"+.zone+"</td><td>"+(.listed|tostring)+"</td><td>"+(.answer|tostring)+"</td></tr>"' \
+      "${run_dir}/ipquality.json" 2>/dev/null || true)"
   fi
 
   local generated
   generated="$(lzy_now_iso)"
+
+  # Build module bodies into temp fragments to keep heredoc readable
+  local body
+  body="$(
+    # ---- System ----
+    _lzy_html_section_open "system" "系统信息" "${run_dir}/system.json"
+    if [[ -f "${run_dir}/system.json" ]]; then
+      echo '<table class="kv">'
+      _lzy_html_kv_row "主机名" "$(_lzy_jq_or "${run_dir}/system.json" '.os.hostname')"
+      _lzy_html_kv_row "系统" "$(_lzy_jq_or "${run_dir}/system.json" '.os.pretty_name')"
+      _lzy_html_kv_row "内核" "$(_lzy_jq_or "${run_dir}/system.json" '.os.kernel')"
+      _lzy_html_kv_row "架构" "$(_lzy_jq_or "${run_dir}/system.json" '.os.arch')"
+      _lzy_html_kv_row "虚拟化" "$(_lzy_jq_or "${run_dir}/system.json" '.os.virt')"
+      _lzy_html_kv_row "CPU 型号" "$(_lzy_jq_or "${run_dir}/system.json" '.cpu.model')"
+      _lzy_html_kv_row "CPU 核心" "$(_lzy_jq_or "${run_dir}/system.json" '.cpu.cores')"
+      _lzy_html_kv_row "CPU MHz" "$(_lzy_jq_or "${run_dir}/system.json" '.cpu.mhz')"
+      _lzy_html_kv_row "内存总量 (bytes)" "$(_lzy_jq_or "${run_dir}/system.json" '.memory.total_bytes')"
+      _lzy_html_kv_row "可用内存 (bytes)" "$(_lzy_jq_or "${run_dir}/system.json" '.memory.available_bytes')"
+      _lzy_html_kv_row "磁盘摘要" "$(_lzy_jq_or "${run_dir}/system.json" '.disk.lsblk_summary')"
+      _lzy_html_kv_row "默认网卡" "$(_lzy_jq_or "${run_dir}/system.json" '.network.default_iface')"
+      _lzy_html_kv_row "IPv4" "$(_lzy_jq_or "${run_dir}/system.json" '.network.ipv4')"
+      _lzy_html_kv_row "IPv6" "$(_lzy_jq_or "${run_dir}/system.json" '.network.ipv6')"
+      _lzy_html_kv_row "公网 IP" "$(_lzy_jq_or "${run_dir}/system.json" '.network.public_ip')"
+      _lzy_html_kv_row "ASN" "$(_lzy_jq_or "${run_dir}/system.json" '.network.asn')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/system.json"
+
+    # ---- CPU ----
+    _lzy_html_section_open "cpu" "CPU" "${run_dir}/cpu.json"
+    if [[ -f "${run_dir}/cpu.json" ]]; then
+      echo '<h3>sysbench</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/cpu.json" '.sysbench.status')"
+      _lzy_html_kv_row "线程数" "$(_lzy_jq_or "${run_dir}/cpu.json" '.sysbench.threads')"
+      _lzy_html_kv_row "Events" "$(_lzy_jq_or "${run_dir}/cpu.json" '.sysbench.events')"
+      _lzy_html_kv_row "单核 eps" "$(_lzy_jq_or "${run_dir}/cpu.json" '.sysbench.single_eps')"
+      _lzy_html_kv_row "多核 eps" "$(_lzy_jq_or "${run_dir}/cpu.json" '.sysbench.multi_eps')"
+      _lzy_html_kv_row "错误" "$(_lzy_jq_or "${run_dir}/cpu.json" '.sysbench.error')"
+      echo '</table><h3>Geekbench（可选）</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/cpu.json" '.geekbench.status')"
+      _lzy_html_kv_row "Single" "$(_lzy_jq_or "${run_dir}/cpu.json" '.geekbench.single')"
+      _lzy_html_kv_row "Multi" "$(_lzy_jq_or "${run_dir}/cpu.json" '.geekbench.multi')"
+      _lzy_html_kv_row "错误" "$(_lzy_jq_or "${run_dir}/cpu.json" '.geekbench.error')"
+      echo '</table><h3>UnixBench（可选）</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/cpu.json" '.unixbench.status')"
+      _lzy_html_kv_row "Index Score" "$(_lzy_jq_or "${run_dir}/cpu.json" '.unixbench.index_score')"
+      _lzy_html_kv_row "错误" "$(_lzy_jq_or "${run_dir}/cpu.json" '.unixbench.error')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/cpu.json"
+
+    # ---- Memory ----
+    _lzy_html_section_open "memory" "内存" "${run_dir}/memory.json"
+    if [[ -f "${run_dir}/memory.json" ]]; then
+      echo '<table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/memory.json" '.status')"
+      _lzy_html_kv_row "测试大小" "$(_lzy_jq_or "${run_dir}/memory.json" '.config.size')"
+      _lzy_html_kv_row "线程" "$(_lzy_jq_or "${run_dir}/memory.json" '.config.threads')"
+      _lzy_html_kv_row "读 ops/s" "$(_lzy_jq_or "${run_dir}/memory.json" '.read.ops_per_sec')"
+      _lzy_html_kv_row "读 MiB/s" "$(_lzy_jq_or "${run_dir}/memory.json" '.read.mib_per_sec')"
+      _lzy_html_kv_row "写 ops/s" "$(_lzy_jq_or "${run_dir}/memory.json" '.write.ops_per_sec')"
+      _lzy_html_kv_row "写 MiB/s" "$(_lzy_jq_or "${run_dir}/memory.json" '.write.mib_per_sec')"
+      _lzy_html_kv_row "延迟说明" "$(_lzy_jq_or "${run_dir}/memory.json" '.latency.note')"
+      _lzy_html_kv_row "错误" "$(_lzy_jq_or "${run_dir}/memory.json" '.error')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/memory.json"
+
+    # ---- Disk ----
+    _lzy_html_section_open "disk" "磁盘" "${run_dir}/disk.json"
+    if [[ -f "${run_dir}/disk.json" ]]; then
+      echo '<h3>配置</h3><table class="kv">'
+      _lzy_html_kv_row "测试目录" "$(_lzy_jq_or "${run_dir}/disk.json" '.config.test_dir')"
+      _lzy_html_kv_row "文件大小" "$(_lzy_jq_or "${run_dir}/disk.json" '.config.file_size')"
+      _lzy_html_kv_row "fio 时长 (s)" "$(_lzy_jq_or "${run_dir}/disk.json" '.config.runtime_sec')"
+      _lzy_html_kv_row "iodepth" "$(_lzy_jq_or "${run_dir}/disk.json" '.config.iodepth')"
+      _lzy_html_kv_row "随机块大小" "$(_lzy_jq_or "${run_dir}/disk.json" '.config.blocksize_rand')"
+      _lzy_html_kv_row "dd 启用" "$(_lzy_jq_or "${run_dir}/disk.json" '.config.dd_enabled')"
+      _lzy_html_kv_row "fio 启用" "$(_lzy_jq_or "${run_dir}/disk.json" '.config.fio_enabled')"
+      echo '</table><h3>dd 快测</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/disk.json" '.dd.status')"
+      _lzy_html_kv_row "写 MiB/s" "$(_lzy_jq_or "${run_dir}/disk.json" '.dd.write_mib_s')"
+      _lzy_html_kv_row "读 MiB/s" "$(_lzy_jq_or "${run_dir}/disk.json" '.dd.read_mib_s')"
+      echo '</table><h3>fio 顺序</h3><table class="kv">'
+      _lzy_html_kv_row "顺序读 MiB/s" "$(_lzy_jq_or "${run_dir}/disk.json" '.sequential.read_mib_s')"
+      _lzy_html_kv_row "顺序写 MiB/s" "$(_lzy_jq_or "${run_dir}/disk.json" '.sequential.write_mib_s')"
+      echo '</table><h3>fio 随机</h3><table class="kv">'
+      _lzy_html_kv_row "随机读 MiB/s" "$(_lzy_jq_or "${run_dir}/disk.json" '.random.read_mib_s')"
+      _lzy_html_kv_row "随机写 MiB/s" "$(_lzy_jq_or "${run_dir}/disk.json" '.random.write_mib_s')"
+      _lzy_html_kv_row "随机读 IOPS" "$(_lzy_jq_or "${run_dir}/disk.json" '.random.read_iops')"
+      _lzy_html_kv_row "随机写 IOPS" "$(_lzy_jq_or "${run_dir}/disk.json" '.random.write_iops')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/disk.json"
+
+    # ---- Network ----
+    _lzy_html_section_open "network" "网络" "${run_dir}/network.json"
+    if [[ -f "${run_dir}/network.json" ]]; then
+      echo '<h3>Speedtest</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.status')"
+      _lzy_html_kv_row "Ping (ms)" "$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.ping_ms')"
+      _lzy_html_kv_row "下载 Mbps" "$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.download_mbps')"
+      _lzy_html_kv_row "上传 Mbps" "$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.upload_mbps')"
+      _lzy_html_kv_row "服务器" "$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.server')"
+      _lzy_html_kv_row "ISP" "$(_lzy_jq_or "${run_dir}/network.json" '.speedtest.isp')"
+      echo '</table><h3>三网 Ping</h3><table class="kv">'
+      _lzy_html_kv_row "电信 (ms)" "$(_lzy_jq_or "${run_dir}/network.json" '.china_ping.telecom_ms')"
+      _lzy_html_kv_row "联通 (ms)" "$(_lzy_jq_or "${run_dir}/network.json" '.china_ping.unicom_ms')"
+      _lzy_html_kv_row "移动 (ms)" "$(_lzy_jq_or "${run_dir}/network.json" '.china_ping.mobile_ms')"
+      _lzy_html_kv_row "电信目标" "$(_lzy_jq_or "${run_dir}/network.json" '.china_ping.targets.telecom')"
+      _lzy_html_kv_row "联通目标" "$(_lzy_jq_or "${run_dir}/network.json" '.china_ping.targets.unicom')"
+      _lzy_html_kv_row "移动目标" "$(_lzy_jq_or "${run_dir}/network.json" '.china_ping.targets.mobile')"
+      echo '</table><h3>三网 / CDN 下载测速</h3><table class="kv">'
+      _lzy_html_kv_row "启用" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.enabled')"
+      _lzy_html_kv_row "电信 Mbps" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.telecom_mbps')"
+      _lzy_html_kv_row "联通 Mbps" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.unicom_mbps')"
+      _lzy_html_kv_row "移动 Mbps" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.mobile_mbps')"
+      _lzy_html_kv_row "国际 Mbps" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.intl_mbps')"
+      _lzy_html_kv_row "电信 URL" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.urls.telecom')"
+      _lzy_html_kv_row "联通 URL" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.urls.unicom')"
+      _lzy_html_kv_row "移动 URL" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.urls.mobile')"
+      _lzy_html_kv_row "国际 URL" "$(_lzy_jq_or "${run_dir}/network.json" '.china_download.urls.intl')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/network.json"
+
+    # ---- Route ----
+    _lzy_html_section_open "route" "线路" "${run_dir}/route.json"
+    if [[ -f "${run_dir}/route.json" ]]; then
+      echo '<table class="kv">'
+      _lzy_html_kv_row "公网 IP" "$(_lzy_jq_or "${run_dir}/route.json" '.public_ip')"
+      _lzy_html_kv_row "ASN" "$(_lzy_jq_or "${run_dir}/route.json" '.asn.number')"
+      _lzy_html_kv_row "Org" "$(_lzy_jq_or "${run_dir}/route.json" '.asn.org')"
+      _lzy_html_kv_row "ASN 标签" "$(_lzy_jq_or "${run_dir}/route.json" '.asn.label')"
+      _lzy_html_kv_row "带宽类型" "$(_lzy_jq_or "${run_dir}/route.json" '.bandwidth_type')"
+      _lzy_html_kv_row "线路推断" "$(_lzy_jq_or "${run_dir}/route.json" '.summary.best_guess')"
+      _lzy_html_kv_row "线路分" "$(_lzy_jq_or "${run_dir}/route.json" '.summary.score')"
+      _lzy_html_kv_row "ip-api ISP" "$(_lzy_jq_or "${run_dir}/route.json" '.ip_api.isp')"
+      _lzy_html_kv_row "ip-api Org" "$(_lzy_jq_or "${run_dir}/route.json" '.ip_api.org')"
+      _lzy_html_kv_row "hosting" "$(_lzy_jq_or "${run_dir}/route.json" '.ip_api.hosting')"
+      _lzy_html_kv_row "mobile" "$(_lzy_jq_or "${run_dir}/route.json" '.ip_api.mobile')"
+      _lzy_html_kv_row "proxy" "$(_lzy_jq_or "${run_dir}/route.json" '.ip_api.proxy')"
+      echo '</table><h3>回程标签</h3><table class="kv">'
+      _lzy_html_kv_row "电信目标" "$(_lzy_jq_or "${run_dir}/route.json" '.return_path.telecom.target')"
+      _lzy_html_kv_row "电信标签" "$(_lzy_jq_or "${run_dir}/route.json" '.return_path.telecom.labels')"
+      _lzy_html_kv_row "联通目标" "$(_lzy_jq_or "${run_dir}/route.json" '.return_path.unicom.target')"
+      _lzy_html_kv_row "联通标签" "$(_lzy_jq_or "${run_dir}/route.json" '.return_path.unicom.labels')"
+      _lzy_html_kv_row "移动目标" "$(_lzy_jq_or "${run_dir}/route.json" '.return_path.mobile.target')"
+      _lzy_html_kv_row "移动标签" "$(_lzy_jq_or "${run_dir}/route.json" '.return_path.mobile.labels')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/route.json"
+
+    # ---- Streaming ----
+    _lzy_html_section_open "streaming" "流媒体 / AI 解锁" "${run_dir}/streaming.json"
+    if [[ -f "${run_dir}/streaming.json" ]]; then
+      echo '<table class="kv">'
+      _lzy_html_kv_row "解锁分" "$(_lzy_jq_or "${run_dir}/streaming.json" '.summary.unlock_score')"
+      _lzy_html_kv_row "总数" "$(_lzy_jq_or "${run_dir}/streaming.json" '.summary.total')"
+      _lzy_html_kv_row "yes" "$(_lzy_jq_or "${run_dir}/streaming.json" '.summary.yes')"
+      _lzy_html_kv_row "no" "$(_lzy_jq_or "${run_dir}/streaming.json" '.summary.no')"
+      _lzy_html_kv_row "fail" "$(_lzy_jq_or "${run_dir}/streaming.json" '.summary.fail')"
+      _lzy_html_kv_row "unknown" "$(_lzy_jq_or "${run_dir}/streaming.json" '.summary.unknown')"
+      echo '</table>'
+      echo '<table><thead><tr><th>服务</th><th>状态</th><th>详情</th></tr></thead><tbody>'
+      echo "${services_rows:-<tr><td colspan=\"3\">无明细</td></tr>}"
+      echo '</tbody></table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/streaming.json"
+
+    # ---- IP Quality ----
+    _lzy_html_section_open "ipquality" "IP 质量" "${run_dir}/ipquality.json"
+    if [[ -f "${run_dir}/ipquality.json" ]]; then
+      echo '<table class="kv">'
+      _lzy_html_kv_row "IP" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.ip')"
+      _lzy_html_kv_row "质量分" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.summary.score')"
+      _lzy_html_kv_row "风险" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.summary.risk')"
+      _lzy_html_kv_row "国家" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.geo.country')"
+      _lzy_html_kv_row "地区" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.geo.region')"
+      _lzy_html_kv_row "城市" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.geo.city')"
+      _lzy_html_kv_row "ISP" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.network.isp')"
+      _lzy_html_kv_row "Org" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.network.org')"
+      _lzy_html_kv_row "AS" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.network.as')"
+      _lzy_html_kv_row "带宽类型" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.network.bandwidth_type')"
+      _lzy_html_kv_row "mobile" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.network.mobile')"
+      _lzy_html_kv_row "proxy" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.network.proxy')"
+      _lzy_html_kv_row "hosting" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.network.hosting')"
+      _lzy_html_kv_row "SMTP 25" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.mail.smtp_25')"
+      _lzy_html_kv_row "Submission 587" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.mail.submission_587')"
+      _lzy_html_kv_row "DNSBL listed" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.dnsbl.listed_count')"
+      _lzy_html_kv_row "DNSBL checked" "$(_lzy_jq_or "${run_dir}/ipquality.json" '.dnsbl.checked_count')"
+      echo '</table>'
+      if [[ -n "${dnsbl_rows}" ]]; then
+        echo '<h3>DNSBL 明细</h3><table><thead><tr><th>Zone</th><th>Listed</th><th>Answer</th></tr></thead><tbody>'
+        echo "${dnsbl_rows}"
+        echo '</tbody></table>'
+      fi
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/ipquality.json"
+
+    # ---- Application ----
+    _lzy_html_section_open "application" "应用测试" "${run_dir}/application.json"
+    if [[ -f "${run_dir}/application.json" ]]; then
+      echo '<h3>Docker</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.status')"
+      _lzy_html_kv_row "Docker 版本" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.docker_version')"
+      _lzy_html_kv_row "Nginx 镜像" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.images.nginx')"
+      _lzy_html_kv_row "Redis 镜像" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.images.redis')"
+      _lzy_html_kv_row "MySQL 镜像" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.images.mysql')"
+      _lzy_html_kv_row "Nginx 启动 ms" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.nginx_start_ms')"
+      _lzy_html_kv_row "Redis 启动 ms" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.redis_start_ms')"
+      _lzy_html_kv_row "MySQL 启动 ms" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.mysql_start_ms')"
+      _lzy_html_kv_row "错误" "$(_lzy_jq_or "${run_dir}/application.json" '.docker.error')"
+      echo '</table><h3>WordPress</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.status')"
+      _lzy_html_kv_row "端口" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.port')"
+      _lzy_html_kv_row "部署 ms" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.deploy_ms')"
+      _lzy_html_kv_row "TTFB ms" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.ttfb_ms')"
+      _lzy_html_kv_row "整页 ms" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.total_ms')"
+      _lzy_html_kv_row "HTTP 码" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.http_code')"
+      _lzy_html_kv_row "Compose 项目" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.compose_project')"
+      _lzy_html_kv_row "错误" "$(_lzy_jq_or "${run_dir}/application.json" '.wordpress.error')"
+      echo '</table><h3>稳定性</h3><table class="kv">'
+      _lzy_html_kv_row "状态" "$(_lzy_jq_or "${run_dir}/application.json" '.stability.status')"
+      _lzy_html_kv_row "轮次" "$(_lzy_jq_or "${run_dir}/application.json" '.stability.rounds')"
+      _lzy_html_kv_row "成功" "$(_lzy_jq_or "${run_dir}/application.json" '.stability.ok')"
+      _lzy_html_kv_row "失败" "$(_lzy_jq_or "${run_dir}/application.json" '.stability.fail')"
+      _lzy_html_kv_row "备注" "$(_lzy_jq_or "${run_dir}/application.json" '.stability.note')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/application.json"
+
+    # ---- Score ----
+    _lzy_html_section_open "score" "评分" "${run_dir}/score.json"
+    if [[ -f "${run_dir}/score.json" ]]; then
+      echo '<table class="kv">'
+      _lzy_html_kv_row "综合分" "$(_lzy_jq_or "${run_dir}/score.json" '.overall')"
+      _lzy_html_kv_row "方法" "$(_lzy_jq_or "${run_dir}/score.json" '.method')"
+      _lzy_html_kv_row "CPU" "$(_lzy_jq_or "${run_dir}/score.json" '.scores.cpu')"
+      _lzy_html_kv_row "Memory" "$(_lzy_jq_or "${run_dir}/score.json" '.scores.memory')"
+      _lzy_html_kv_row "Disk" "$(_lzy_jq_or "${run_dir}/score.json" '.scores.disk')"
+      _lzy_html_kv_row "Network" "$(_lzy_jq_or "${run_dir}/score.json" '.scores.network')"
+      _lzy_html_kv_row "Route" "$(_lzy_jq_or "${run_dir}/score.json" '.scores.route')"
+      _lzy_html_kv_row "Application" "$(_lzy_jq_or "${run_dir}/score.json" '.scores.application')"
+      _lzy_html_kv_row "Price" "$(_lzy_jq_or "${run_dir}/score.json" '.scores.price')"
+      _lzy_html_kv_row "Price 输入" "$(_lzy_jq_or "${run_dir}/score.json" '.price_input')"
+      echo '</table><h3>权重使用</h3><table class="kv">'
+      _lzy_html_kv_row "CPU 权重" "$(_lzy_jq_or "${run_dir}/score.json" '.weights_used.cpu')"
+      _lzy_html_kv_row "Memory 权重" "$(_lzy_jq_or "${run_dir}/score.json" '.weights_used.memory')"
+      _lzy_html_kv_row "Disk 权重" "$(_lzy_jq_or "${run_dir}/score.json" '.weights_used.disk')"
+      _lzy_html_kv_row "Network 权重" "$(_lzy_jq_or "${run_dir}/score.json" '.weights_used.network')"
+      _lzy_html_kv_row "Route 权重" "$(_lzy_jq_or "${run_dir}/score.json" '.weights_used.route')"
+      _lzy_html_kv_row "Application 权重" "$(_lzy_jq_or "${run_dir}/score.json" '.weights_used.application')"
+      _lzy_html_kv_row "Price 权重" "$(_lzy_jq_or "${run_dir}/score.json" '.weights_used.price')"
+      echo '</table><h3>缺失维度 (N/A)</h3><table class="kv">'
+      _lzy_html_kv_row "cpu" "$(_lzy_jq_or "${run_dir}/score.json" '.na.cpu')"
+      _lzy_html_kv_row "memory" "$(_lzy_jq_or "${run_dir}/score.json" '.na.memory')"
+      _lzy_html_kv_row "disk" "$(_lzy_jq_or "${run_dir}/score.json" '.na.disk')"
+      _lzy_html_kv_row "network" "$(_lzy_jq_or "${run_dir}/score.json" '.na.network')"
+      _lzy_html_kv_row "route" "$(_lzy_jq_or "${run_dir}/score.json" '.na.route')"
+      _lzy_html_kv_row "application" "$(_lzy_jq_or "${run_dir}/score.json" '.na.application')"
+      _lzy_html_kv_row "price" "$(_lzy_jq_or "${run_dir}/score.json" '.na.price')"
+      echo '</table>'
+    else
+      echo '<p class="muted">未执行。</p>'
+    fi
+    _lzy_html_section_close "${run_dir}/score.json"
+  )"
 
   cat >"${out}" <<EOF
 <!DOCTYPE html>
@@ -197,13 +518,22 @@ body {
   color: var(--text);
   line-height: 1.55;
 }
-.wrap { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 40px 20px 80px; }
 .brand {
   font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--accent); font-weight: 600; margin-bottom: 8px;
 }
 h1 { font-size: 2rem; margin: 0 0 8px; font-weight: 700; }
-.sub { color: var(--muted); margin-bottom: 28px; }
+.sub { color: var(--muted); margin-bottom: 20px; }
+.toc {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 28px;
+}
+.toc a {
+  color: var(--text); text-decoration: none; font-size: 0.85rem;
+  border: 1px solid var(--line); background: var(--panel);
+  padding: 6px 10px; border-radius: 8px;
+}
+.toc a:hover { border-color: var(--accent); color: var(--accent); }
 .hero {
   display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px;
   margin-bottom: 28px;
@@ -233,18 +563,34 @@ h1 { font-size: 2rem; margin: 0 0 8px; font-weight: 700; }
   border-radius: 12px; padding: 16px;
 }
 .card .label { color: var(--muted); font-size: 0.8rem; }
-.card .value { font-size: 1.45rem; font-weight: 650; margin-top: 6px; }
-section { margin-top: 32px; }
-h2 {
-  font-size: 1.15rem; border-bottom: 1px solid var(--line);
-  padding-bottom: 8px; margin-bottom: 14px;
+.card .value { font-size: 1.35rem; font-weight: 650; margin-top: 6px; word-break: break-all; }
+section.mod {
+  margin-top: 36px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 12px;
 }
-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
-th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); }
-th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+h2 {
+  font-size: 1.2rem; margin: 0 0 14px; display: flex; align-items: center; gap: 10px;
+}
+h3 { font-size: 0.95rem; color: var(--accent); margin: 18px 0 8px; }
+.badge {
+  font-size: 0.72rem; font-weight: 650; letter-spacing: 0.04em;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 8px; color: var(--muted); text-transform: uppercase;
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin-bottom: 8px; }
+th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.kv th { width: 36%; color: var(--muted); font-weight: 600; font-size: 0.82rem; }
 .st-yes { color: var(--ok); font-weight: 600; }
 .st-no { color: var(--no); font-weight: 600; }
-.st-fail, .st-unknown { color: var(--unk); }
+.st-fail, .st-unknown, .st-skip { color: var(--unk); }
+.muted { color: var(--muted); }
+details.raw { margin: 12px 0 4px; }
+details.raw summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+pre.json {
+  background: #12181f; border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px; overflow: auto; max-height: 360px; font-size: 0.78rem;
+  white-space: pre-wrap; word-break: break-word;
+}
 .footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; }
 code { background: #12181f; padding: 2px 6px; border-radius: 4px; }
 </style>
@@ -254,6 +600,19 @@ code { background: #12181f; padding: 2px 6px; border-radius: 4px; }
   <div class="brand">$(_lzy_html_escape "${LZY_BRAND}") · $(_lzy_html_escape "${LZY_NAME}")</div>
   <h1>云服务器评测报告</h1>
   <p class="sub">Run ID <code>$(_lzy_html_escape "${run_id}")</code> · 生成于 $(_lzy_html_escape "${generated}") · v$(_lzy_html_escape "${LZY_VERSION}")</p>
+
+  <nav class="toc">
+    <a href="#system">系统</a>
+    <a href="#cpu">CPU</a>
+    <a href="#memory">内存</a>
+    <a href="#disk">磁盘</a>
+    <a href="#network">网络</a>
+    <a href="#route">线路</a>
+    <a href="#streaming">解锁</a>
+    <a href="#ipquality">IP 质量</a>
+    <a href="#application">应用</a>
+    <a href="#score">评分</a>
+  </nav>
 
   <div class="hero">
     <div class="score-box">
@@ -266,12 +625,12 @@ code { background: #12181f; padding: 2px 6px; border-radius: 4px; }
         <dt>主机</dt><dd>$(_lzy_html_escape "${host}")</dd>
         <dt>系统</dt><dd>$(_lzy_html_escape "${os}")</dd>
         <dt>CPU</dt><dd>$(_lzy_html_escape "${cpu_model}")</dd>
-        <dt>线路推断</dt><dd>$(_lzy_html_escape "${route_guess}")</dd>
+        <dt>线路推断</dt><dd>$(_lzy_html_escape "$(_lzy_jq_or "${run_dir}/route.json" '.summary.best_guess')")</dd>
       </dl>
     </div>
   </div>
 
-  <h2>分项评分</h2>
+  <h2>分项评分总览</h2>
   <div class="grid">
     $(_lzy_html_metric_card "CPU" "${cpu_s}")
     $(_lzy_html_metric_card "Memory" "${mem_s}")
@@ -279,41 +638,14 @@ code { background: #12181f; padding: 2px 6px; border-radius: 4px; }
     $(_lzy_html_metric_card "Network" "${net_s}")
     $(_lzy_html_metric_card "Route" "${route_s}")
     $(_lzy_html_metric_card "Application" "${app_s}")
+    $(_lzy_html_metric_card "Price" "${price_s}")
   </div>
 
-  <h2>关键指标</h2>
-  <div class="grid">
-    $(_lzy_html_metric_card "CPU 多核 eps" "${cpu_multi}")
-    $(_lzy_html_metric_card "内存读 MiB/s" "${mem_read}")
-    $(_lzy_html_metric_card "磁盘顺序读" "${disk_seq}")
-    $(_lzy_html_metric_card "下行 Mbps" "${dl}")
-    $(_lzy_html_metric_card "上行 Mbps" "${ul}")
-    $(_lzy_html_metric_card "Ping ms" "${ping}")
-    $(_lzy_html_metric_card "解锁分" "${unlock}")
-  </div>
-
-  <h2>应用测试</h2>
-  <div class="grid">
-    $(_lzy_html_metric_card "Nginx 启动 ms" "${nginx_ms}")
-    $(_lzy_html_metric_card "Redis 启动 ms" "${redis_ms}")
-    $(_lzy_html_metric_card "MySQL 启动 ms" "${mysql_ms}")
-    $(_lzy_html_metric_card "WP 部署 ms" "${wp_deploy}")
-    $(_lzy_html_metric_card "WP TTFB ms" "${wp_ttfb}")
-  </div>
-
-  <section>
-    <h2>流媒体 / AI 解锁</h2>
-    <table>
-      <thead><tr><th>服务</th><th>状态</th><th>详情</th></tr></thead>
-      <tbody>
-        ${services_rows:-<tr><td colspan="3">无数据</td></tr>}
-      </tbody>
-    </table>
-  </section>
+${body}
 
   <p class="footer">
     Generated by $(_lzy_html_escape "${LZY_NAME}") ($(_lzy_html_escape "${LZY_BRAND}")) — Once Test, Multiple Output<br/>
-    原始 JSON：<code>$(_lzy_html_escape "${run_dir}")</code>
+    原始 JSON：<code>$(_lzy_html_escape "${run_dir}")</code> · 可用 <code>./benchmark.sh report</code> 重新生成
   </p>
 </div>
 </body>
