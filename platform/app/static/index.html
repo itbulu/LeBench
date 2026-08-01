@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LZY Bench Platform — LeZaiYun</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div>
+        <div class="brand">LeZaiYun · LZY Bench Platform</div>
+        <h1>云服务器评测看板</h1>
+        <p class="tagline">Once Test, Multiple Output — 排行 · 对比 · API</p>
+      </div>
+      <div class="status" id="health">连接中…</div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="ranking">排行榜</button>
+      <button class="tab" data-tab="runs">全部结果</button>
+      <button class="tab" data-tab="compare">多机对比</button>
+      <button class="tab" data-tab="api">API</button>
+    </nav>
+
+    <section id="panel-ranking" class="panel active">
+      <div class="toolbar">
+        <label>
+          指标
+          <select id="metric">
+            <option value="overall">综合分</option>
+            <option value="cpu_score">CPU</option>
+            <option value="memory_score">Memory</option>
+            <option value="disk_score">Disk</option>
+            <option value="network_score">Network</option>
+            <option value="route_score">Route</option>
+            <option value="application_score">Application</option>
+          </select>
+        </label>
+        <button id="btn-refresh-rank" class="btn">刷新</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>标签</th><th>主机</th><th>厂商</th>
+              <th>综合</th><th>指标值</th><th>线路</th><th>CPU</th>
+            </tr>
+          </thead>
+          <tbody id="rank-body"><tr><td colspan="8">加载中…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-runs" class="panel">
+      <div class="toolbar">
+        <button id="btn-refresh-runs" class="btn">刷新</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Run ID</th><th>标签</th><th>综合</th>
+              <th>CPU</th><th>Disk</th><th>Net</th><th>App</th><th>时间</th>
+            </tr>
+          </thead>
+          <tbody id="runs-body"><tr><td colspan="8">加载中…</td></tr></tbody>
+        </table>
+      </div>
+      <pre id="run-detail" class="detail hidden"></pre>
+    </section>
+
+    <section id="panel-compare" class="panel">
+      <div class="toolbar">
+        <label class="grow">
+          Run IDs（逗号分隔，至少 2 个）
+          <input id="compare-ids" type="text" placeholder="20260801-120000,20260801-130000"/>
+        </label>
+        <button id="btn-compare" class="btn">对比</button>
+      </div>
+      <div id="compare-result" class="compare-grid"></div>
+    </section>
+
+    <section id="panel-api" class="panel">
+      <div class="doc">
+        <h2>HTTP API</h2>
+        <ul>
+          <li><code>GET /api/health</code> — 健康检查</li>
+          <li><code>GET /api/runs</code> — 列表</li>
+          <li><code>GET /api/runs/{run_id}</code> — 详情</li>
+          <li><code>POST /api/runs</code> — 上报评测结果</li>
+          <li><code>GET /api/ranking?metric=overall</code> — 排行榜</li>
+          <li><code>GET /api/compare?runs=id1,id2</code> — 多机对比</li>
+          <li><code>DELETE /api/runs/{run_id}</code> — 删除</li>
+        </ul>
+        <h2>CLI 上报</h2>
+        <pre>sudo ./benchmark.sh upload
+# 或
+python platform/scripts/upload.py results/&lt;run_id&gt; --api http://127.0.0.1:8787</pre>
+        <h2>交互文档</h2>
+        <p><a href="/docs" target="_blank">OpenAPI /docs</a></p>
+      </div>
+    </section>
+
+    <footer class="foot">
+      LZY Bench Platform v1.3.0 · LeZaiYun（乐在云）
+    </footer>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

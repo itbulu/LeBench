@@ -1,0 +1,30 @@
+# Runtime / generated
+results/*
+!results/.gitkeep
+logs/*
+!logs/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# Platform
+platform/.venv/
+platform/data/*.db
+platform/data/*.db-*
+platform/**/__pycache__/
+platform/**/*.pyc
+
+# Local overrides
+config/local.conf
+
+# Temp / OS
+*.bin
+*.log
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Editor
+.idea/
+.vscode/
+*.code-workspace

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# core/config.sh - load configuration
+# shellcheck source=/dev/null
+
+lzy_load_config() {
+  local conf="${LZY_ROOT}/config/default.conf"
+  local user_conf="${LZY_ROOT}/config/local.conf"
+
+  if [[ ! -f "${conf}" ]]; then
+    lzy_die "缺少配置文件: ${conf}"
+  fi
+
+  # shellcheck disable=SC1090
+  source "${conf}"
+
+  if [[ -f "${user_conf}" ]]; then
+    # shellcheck disable=SC1090
+    source "${user_conf}"
+    lzy_info "已加载本地配置: config/local.conf"
+  fi
+
+  # Absolute paths
+  if [[ "${LZY_RESULTS_DIR}" != /* ]]; then
+    LZY_RESULTS_DIR="${LZY_ROOT}/${LZY_RESULTS_DIR}"
+  fi
+  if [[ "${LZY_LOGS_DIR}" != /* ]]; then
+    LZY_LOGS_DIR="${LZY_ROOT}/${LZY_LOGS_DIR}"
+  fi
+  if [[ "${LZY_REPORTS_DIR}" != /* ]]; then
+    LZY_REPORTS_DIR="${LZY_ROOT}/${LZY_REPORTS_DIR}"
+  fi
+  if [[ "${LZY_TEMPLATES_DIR}" != /* ]]; then
+    LZY_TEMPLATES_DIR="${LZY_ROOT}/${LZY_TEMPLATES_DIR}"
+  fi
+
+  export LZY_VERSION LZY_NAME LZY_BRAND
+  export LZY_RESULTS_DIR LZY_LOGS_DIR LZY_REPORTS_DIR LZY_TEMPLATES_DIR
+  export LZY_REQUIRE_ROOT LZY_DEFAULT_MODULES LZY_MODULE_TIMEOUT LZY_KEEP_TEMP
+  export LZY_RUN_ID="${LZY_RUN_ID:-}"
+  export LZY_RUN_DIR="${LZY_RUN_DIR:-}"
+  export LZY_WEIGHT_CPU LZY_WEIGHT_MEMORY LZY_WEIGHT_DISK LZY_WEIGHT_NETWORK
+  export LZY_WEIGHT_ROUTE LZY_WEIGHT_APPLICATION LZY_WEIGHT_PRICE
+  export LZY_PRICE="${LZY_PRICE:-}"
+  export LZY_SCORE_REF_CPU_MULTI LZY_SCORE_REF_CPU_SINGLE LZY_SCORE_REF_MEM_MIB
+  export LZY_SCORE_REF_DISK_SEQ LZY_SCORE_REF_DISK_IOPS
+  export LZY_SCORE_REF_NET_DL LZY_SCORE_REF_NET_UL LZY_SCORE_REF_NET_PING
+  export LZY_SCORE_REF_PRICE LZY_SCORE_REF_TTFB
+  export LZY_ROUTE_MAX_HOPS LZY_ROUTE_TARGET_CT LZY_ROUTE_TARGET_CU LZY_ROUTE_TARGET_CM
+  export LZY_STREAM_TIMEOUT LZY_STREAM_DEBUG
+  export LZY_DOCKER_AUTO_INSTALL LZY_APP_CLEANUP LZY_APP_WORKDIR
+  export LZY_DOCKER_IMAGE_NGINX LZY_DOCKER_IMAGE_REDIS LZY_DOCKER_IMAGE_MYSQL
+  export LZY_DOCKER_WAIT_SEC LZY_DOCKER_MYSQL_WAIT_SEC
+  export LZY_WP_HOST_PORT LZY_WP_WAIT_SEC
+  export LZY_STABILITY_ENABLE LZY_STABILITY_ROUNDS
+  export LZY_SCORE_REF_WP_TOTAL_MS LZY_SCORE_REF_WP_DEPLOY_MS
+  export LZY_SCORE_REF_DOCKER_NGINX_MS LZY_SCORE_REF_DOCKER_REDIS_MS LZY_SCORE_REF_DOCKER_MYSQL_MS
+  export LZY_PLATFORM_API LZY_PLATFORM_TOKEN LZY_UPLOAD_LABEL LZY_UPLOAD_PROVIDER LZY_UPLOAD_REGION
+}
