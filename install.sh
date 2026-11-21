@@ -2,7 +2,7 @@
 # LeBench one-click installer (auditable).
 #
 # Recommended (review then run):
-#   curl -fsSL -o install.sh https://raw.githubusercontent.com/<ORG>/LeBench/main/install.sh
+#   curl -fsSL -o install.sh https://raw.githubusercontent.com/itbulu/LeBench/main/install.sh
 #   less install.sh
 #   bash install.sh --yes
 #
@@ -21,8 +21,7 @@ UNINSTALL=0
 SKIP_DOCTOR=0
 LEBENCH_PREFIX="${LEBENCH_PREFIX:-${HOME}/.local/share/lebench}"
 LEBENCH_BIN_DIR="${LEBENCH_BIN_DIR:-${HOME}/.local/bin}"
-# 推送到 GitHub 后，请改成你的仓库地址，或安装时用 --repo / LEBENCH_REPO_URL 覆盖
-LEBENCH_REPO_URL="${LEBENCH_REPO_URL:-https://github.com/YOUR_GITHUB_USER/LeBench.git}"
+LEBENCH_REPO_URL="${LEBENCH_REPO_URL:-https://github.com/itbulu/LeBench.git}"
 LEBENCH_REF="${LEBENCH_REF:-main}"
 
 usage() {

@@ -1,12 +1,13 @@
 # LeBench 安装说明
 
+仓库：https://github.com/itbulu/LeBench
+
 ## 方式一：一键安装（可先审再跑）
 
 ```bash
-# 将 YOUR_GITHUB_USER 换成你的 GitHub 用户名
-curl -fsSL -o install.sh https://raw.githubusercontent.com/YOUR_GITHUB_USER/LeBench/main/install.sh
+curl -fsSL -o install.sh https://raw.githubusercontent.com/itbulu/LeBench/main/install.sh
 less install.sh
-bash install.sh --yes --repo https://github.com/YOUR_GITHUB_USER/LeBench.git
+bash install.sh --yes
 ```
 
 常用参数：
@@ -18,7 +19,7 @@ bash install.sh --yes --repo https://github.com/YOUR_GITHUB_USER/LeBench.git
 | `--no-deps` | 不装 apt/dnf 包 |
 | `--deps-only` | 只装系统依赖 |
 | `--ref v0.2.0` | 指定 tag/分支 |
-| `--repo URL` | 自定义 Git 地址 |
+| `--repo URL` | 自定义 Git 地址（默认已指向 itbulu/LeBench） |
 | `--uninstall` | 卸载用户级 venv 与 wrapper |
 
 默认安装位置：
@@ -29,9 +30,11 @@ bash install.sh --yes --repo https://github.com/YOUR_GITHUB_USER/LeBench.git
 ## 方式二：从已克隆仓库安装
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USER/LeBench.git
+git clone https://github.com/itbulu/LeBench.git
 cd LeBench
 bash install.sh --local --yes
+export PATH="$HOME/.local/bin:$PATH"
+lebench doctor
 ```
 
 ## 方式三：完全手动（最易审计）
@@ -40,7 +43,7 @@ bash install.sh --local --yes
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip sysbench fio iputils-ping traceroute
 
-git clone https://github.com/YOUR_GITHUB_USER/LeBench.git
+git clone https://github.com/itbulu/LeBench.git
 cd LeBench
 python3 -m venv .venv
 source .venv/bin/activate

@@ -11,7 +11,7 @@ source "${SCRIPT_DIR}/detect_os.sh"
 # Defaults (overridable by env / flags via install.sh)
 LEBENCH_PREFIX="${LEBENCH_PREFIX:-${HOME}/.local/share/lebench}"
 LEBENCH_BIN_DIR="${LEBENCH_BIN_DIR:-${HOME}/.local/bin}"
-LEBENCH_REPO_URL="${LEBENCH_REPO_URL:-https://github.com/YOUR_GITHUB_USER/LeBench.git}"
+LEBENCH_REPO_URL="${LEBENCH_REPO_URL:-https://github.com/itbulu/LeBench.git}"
 LEBENCH_REF="${LEBENCH_REF:-main}"
 ASSUME_YES="${ASSUME_YES:-0}"
 INSTALL_DEPS="${INSTALL_DEPS:-1}"
