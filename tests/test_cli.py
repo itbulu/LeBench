@@ -38,6 +38,13 @@ def test_doctor(capsys):
     assert "system" in data["modules"]
 
 
+def test_safe_print_handles_unicode():
+    from lebench.cli import _safe_print
+
+    # Should not raise even if stream is awkward; smoke call only
+    _safe_print("中文测试 LeBench")
+
+
 def test_run_quick_dry_run(tmp_path, capsys):
     code = main(
         [

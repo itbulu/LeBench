@@ -8,7 +8,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, TextIO
 
 from lebench import __version__
 from lebench.adapters.internal_json import write_internal_json
@@ -16,6 +16,32 @@ from lebench.adapters.txt_report import render_txt, write_txt_report
 from lebench.core.profiles import INTENSITIES, PRODUCT_TYPES, PROFILES, get_intensity, get_profile
 from lebench.core.runner import Runner, doctor_report
 from lebench.modules import REGISTRY
+
+
+def _configure_stdio() -> None:
+    """Avoid UnicodeEncodeError on latin-1 / C locale terminals."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _safe_print(text: str, *, file: Optional[TextIO] = None, end: str = "\n") -> None:
+    out = file or sys.stdout
+    try:
+        out.write(text + end)
+        out.flush()
+    except UnicodeEncodeError:
+        encoding = getattr(out, "encoding", None) or "utf-8"
+        raw = (text + end).encode(encoding, errors="replace")
+        buffer = getattr(out, "buffer", None)
+        if buffer is not None:
+            buffer.write(raw)
+            buffer.flush()
+        else:
+            sys.stdout.buffer.write(raw)
+            sys.stdout.buffer.flush()
 
 
 def _setup_logging(verbose: bool, log_file: Optional[Path]) -> None:
@@ -40,36 +66,39 @@ def _split_csv(value: Optional[str]) -> Optional[List[str]]:
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
     report = doctor_report()
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    _safe_print(json.dumps(report, ensure_ascii=False, indent=2))
     plat = report.get("platform") or {}
     if not plat.get("is_linux"):
-        print("\n[warn] 当前非 Linux；S0 以 Linux x86_64 为首要目标。", file=sys.stderr)
+        _safe_print(
+            "\n[warn] 当前非 Linux；以 Linux x86_64 为首要目标。",
+            file=sys.stderr,
+        )
         return 0
     return 0
 
 
 def cmd_profiles(_args: argparse.Namespace) -> int:
-    print("LeBench Profiles\n")
+    _safe_print("LeBench Profiles\n")
     for name in PRODUCT_TYPES:
         p = PROFILES[name]
-        print(f"  {p.name}")
-        print(f"    product_type : {p.product_type}")
-        print(f"    description  : {p.description}")
-        print(f"    focus        : {', '.join(p.focus_modules)}")
-        print(f"    site_required: {', '.join(p.site_required)}")
+        _safe_print(f"  {p.name}")
+        _safe_print(f"    product_type : {p.product_type}")
+        _safe_print(f"    description  : {p.description}")
+        _safe_print(f"    focus        : {', '.join(p.focus_modules)}")
+        _safe_print(f"    site_required: {', '.join(p.site_required)}")
         if p.unsuitable_auto:
-            print(f"    unsuitable   : {'; '.join(p.unsuitable_auto)}")
-        print()
-    print("Intensities:", ", ".join(INTENSITIES))
+            _safe_print(f"    unsuitable   : {'; '.join(p.unsuitable_auto)}")
+        _safe_print("")
+    _safe_print("Intensities: " + ", ".join(INTENSITIES))
     for name in INTENSITIES:
         plan = get_intensity(name)
-        print(f"  {plan.name}: {plan.description}")
-        print(f"    default_modules: {', '.join(plan.default_modules)}")
+        _safe_print(f"  {plan.name}: {plan.description}")
+        _safe_print(f"    default_modules: {', '.join(plan.default_modules)}")
     return 0
 
 
 def cmd_modules(_args: argparse.Namespace) -> int:
-    print("LeBench Modules\n")
+    _safe_print("LeBench Modules\n")
     # Probe with light context
     from lebench.core.platform import detect_platform
     from lebench.modules.base import RunContext
@@ -86,13 +115,13 @@ def cmd_modules(_args: argparse.Namespace) -> int:
         probe = mod.probe(ctx)
         status = "implemented" if mod.implemented else f"planned/{mod.stage}"
         avail = "available" if probe.available else f"unavailable ({probe.reason})"
-        print(f"  {name:16} [{status}] {avail}")
-        print(f"    {mod.description}")
+        _safe_print(f"  {name:16} [{status}] {avail}")
+        _safe_print(f"    {mod.description}")
         if mod.dependencies:
-            print(f"    requires: {', '.join(mod.dependencies)}")
+            _safe_print(f"    requires: {', '.join(mod.dependencies)}")
         if mod.optional_dependencies:
-            print(f"    optional: {', '.join(mod.optional_dependencies)}")
-        print()
+            _safe_print(f"    optional: {', '.join(mod.optional_dependencies)}")
+        _safe_print("")
     return 0
 
 
@@ -114,7 +143,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     skip = _split_csv(args.skip) or []
 
     if args.allow_sensitive:
-        print(
+        _safe_print(
             "[warn] 已启用 --allow-sensitive：报告可能包含公网 IP/主机名等敏感信息。",
             file=sys.stderr,
         )
@@ -142,25 +171,25 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    print(f"LeBench {__version__} — profile={args.profile} intensity={args.intensity}")
-    print(f"modules: {', '.join(selected)}")
+    _safe_print(f"LeBench {__version__} — profile={args.profile} intensity={args.intensity}")
+    _safe_print(f"modules: {', '.join(selected)}")
     if args.dry_run:
-        print("mode: dry-run（不执行测试）")
+        _safe_print("mode: dry-run（不执行测试）")
 
     result = runner.run()
 
     # Terminal summary
-    print()
-    print(render_txt(result, allow_sensitive=args.allow_sensitive))
+    _safe_print("")
+    _safe_print(render_txt(result, allow_sensitive=args.allow_sensitive), end="")
 
     txt_path = output_dir / f"lebench-{args.profile}-{args.intensity}-{stamp}.txt"
     json_path = output_dir / f"lebench-{args.profile}-{args.intensity}-{stamp}.internal.json"
     write_txt_report(result, txt_path, allow_sensitive=args.allow_sensitive)
     write_internal_json(result, json_path, allow_sensitive=args.allow_sensitive)
 
-    print(f"TXT 报告: {txt_path}")
-    print(f"内部 JSON: {json_path}  （非网站导入格式）")
-    print(f"日志: {log_path}")
+    _safe_print(f"TXT 报告: {txt_path}")
+    _safe_print(f"内部 JSON: {json_path}  （非网站导入格式）")
+    _safe_print(f"日志: {log_path}")
 
     failed = [
         name
@@ -256,6 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    _configure_stdio()
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     if not getattr(args, "command", None):

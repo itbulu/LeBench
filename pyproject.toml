@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lebench"
-version = "0.2.0"
+version = "0.2.1"
 description = "LeBench — Linux 五类服务器统一评测工具"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "LeBench" }]
 keywords = ["benchmark", "vps", "linux", "sysbench"]
 classifiers = [

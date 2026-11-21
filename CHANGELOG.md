@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-11-21
+
+- 修复部分 Linux 终端（latin-1/C locale）下 `lebench doctor` 的 `UnicodeEncodeError`
+- `pyproject.toml` license 改为 SPDX 字符串，消除 setuptools 告警
+
 ## 0.2.0 — 2026-11-21
 
 - 实现 S1：cpu / memory / disk_dd / disk_fio
