@@ -1,0 +1,10 @@
+# 复制为 compatibility_targets.yaml；遵守目标站点 ToS
+# HTTP 可达 ≠ 账号可用 / 完整解锁
+
+checks:
+  - name: cloudflare
+    category: network
+    url: https://1.1.1.1
+  - name: example-ai
+    category: ai
+    url: https://api.openai.com

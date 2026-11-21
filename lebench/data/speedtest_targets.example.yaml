@@ -1,0 +1,16 @@
+# 复制为项目目录或 --config-dir 下的 speedtest_targets.yaml
+# operator: telecom | unicom | mobile | international
+# 仅白名单 URL；注意流量预算
+
+nodes:
+  - name: example-cloudflare
+    region: global
+    operator: international
+    url: https://speed.cloudflare.com/__down?bytes=25000000
+    enabled: false
+  # - name: example-telecom
+  #   region: CN
+  #   operator: telecom
+  #   url: https://example.invalid/down
+  #   upload_url: https://example.invalid/up
+  #   enabled: true

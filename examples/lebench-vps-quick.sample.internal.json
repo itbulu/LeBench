@@ -1,0 +1,97 @@
+{
+  "internal_format": "lebench-internal-v0",
+  "run_id": "5aa5673a-accc-4522-ae1b-33dae0617b98",
+  "product_type": "vps",
+  "intensity": "quick",
+  "started_at": "2026-11-21T19:36:33+08:00",
+  "finished_at": "2026-11-21T19:36:33+08:00",
+  "tool": {
+    "name": "LeBench",
+    "version": "0.1.0"
+  },
+  "dry_run": false,
+  "selected_modules": [
+    "system"
+  ],
+  "skipped_modules": [],
+  "environment": {
+    "os": "Windows",
+    "kernel": "11",
+    "arch": "AMD64",
+    "python_version": "3.14.3",
+    "is_linux": false,
+    "is_root": false,
+    "container_hint": null,
+    "hostname_redacted": "<redacted>",
+    "budget": {
+      "time_sec": 2.0,
+      "disk_write_mb": 0.0,
+      "network_mb": 0.0,
+      "cpu_heavy": false,
+      "risks": [],
+      "notes": [
+        "read-only system probe"
+      ]
+    },
+    "_redaction_applied": true
+  },
+  "privacy": {
+    "sensitive_export": false,
+    "default_redaction": true,
+    "redacted": true
+  },
+  "warnings": [
+    "non_linux_host",
+    "unverified_arch:AMD64",
+    "geteuid_unavailable",
+    "non_linux_unverified — S0 以 Linux 为首要目标"
+  ],
+  "modules": {
+    "system": {
+      "status": "partial",
+      "metrics": {
+        "cpu_model": null,
+        "arch": "AMD64",
+        "cpu_cores": 24,
+        "cpu_freq_mhz": null,
+        "memory_total_mb": null,
+        "memory_available_mb": null,
+        "swap_total_mb": null,
+        "storage_total_gb": null,
+        "storage_type": null,
+        "virtualization": null,
+        "os": "Windows 11",
+        "kernel": "11",
+        "bbr": null,
+        "tcp_congestion_control": null,
+        "ipv4": null,
+        "ipv6": null
+      },
+      "tool": {
+        "name": "lebench.system",
+        "version": "0.1.0"
+      },
+      "conditions": {
+        "collection": "guest_visible_only",
+        "note": "容器/虚拟机内采集结果反映可见资源，不等于宿主机或商家广告配置",
+        "distro_id": null,
+        "distro_version": null,
+        "python_version": "3.14.3",
+        "is_root": false,
+        "container_hint": null
+      },
+      "duration_sec": 0.022,
+      "reason": "missing_fields:cpu_model,memory_total_mb",
+      "warnings": [
+        "non_linux_host",
+        "unverified_arch:AMD64",
+        "geteuid_unavailable",
+        "missing_fields:cpu_model,memory_total_mb"
+      ],
+      "sources": [
+        "os.cpu_count"
+      ]
+    }
+  },
+  "notice": "This file uses lebench-internal-v0. It is NOT the Lezaiyun / website import schema. Do not upload this snapshot as site Schema v1.0."
+}

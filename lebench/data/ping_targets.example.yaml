@@ -1,0 +1,18 @@
+# 复制为 ping_targets.yaml
+# direction: 服务器 → 目标（出站），不等于国内三网入站
+
+targets:
+  - name: cloudflare-dns
+    region: global
+    operator: international
+    host: 1.1.1.1
+    protocol: icmp
+    samples: 10
+    enabled: true
+  - name: example-tcp
+    region: global
+    operator: international
+    host: 1.1.1.1
+    protocol: tcp
+    port: 443
+    enabled: false

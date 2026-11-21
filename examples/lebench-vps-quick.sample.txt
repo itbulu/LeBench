@@ -1,0 +1,74 @@
+========================================================================
+LeBench 评测报告（内部 TXT，非网站导入格式）
+========================================================================
+工具: LeBench 0.1.0
+Run ID: 5aa5673a-accc-4522-ae1b-33dae0617b98
+产品类型(profile): vps
+强度: quick
+开始: 2026-11-21T19:36:33+08:00
+结束: 2026-11-21T19:36:33+08:00
+Dry-run: False
+隐私脱敏: 开启
+
+--- 环境概要 ---
+  os: Windows
+  kernel: 11
+  arch: AMD64
+  python_version: 3.14.3
+  is_linux: no
+  is_root: no
+  container_hint: N/A
+  hostname_redacted: <redacted>
+  budget: time≈2.0s, disk_write≈0.0MB, network≈0.0MB
+
+选定模块: system
+
+--- 全局警告 ---
+  - non_linux_host
+  - unverified_arch:AMD64
+  - geteuid_unavailable
+  - non_linux_unverified — S0 以 Linux 为首要目标
+
+--- 模块结果 ---
+
+[system] status=partial
+  reason: missing_fields:cpu_model,memory_total_mb
+  duration_sec: 0.022
+  tool: lebench.system 0.1.0
+  metrics:
+    cpu_model: N/A
+    arch: AMD64
+    cpu_cores: 24
+    cpu_freq_mhz: N/A
+    memory_total_mb: N/A
+    memory_available_mb: N/A
+    swap_total_mb: N/A
+    storage_total_gb: N/A
+    storage_type: N/A
+    virtualization: N/A
+    os: Windows 11
+    kernel: 11
+    bbr: N/A
+    tcp_congestion_control: N/A
+    ipv4: N/A
+    ipv6: N/A
+  conditions:
+    collection: guest_visible_only
+    note: 容器/虚拟机内采集结果反映可见资源，不等于宿主机或商家广告配置
+    distro_id: N/A
+    distro_version: N/A
+    python_version: 3.14.3
+    is_root: no
+    container_hint: N/A
+  warning: non_linux_host
+  warning: unverified_arch:AMD64
+  warning: geteuid_unavailable
+  warning: missing_fields:cpu_model,memory_total_mb
+  sources: os.cpu_count
+
+--- 说明 ---
+可比性限制：CPU 共享争用、缓存、磁盘挂载类型、测速节点、网络方向、测试时间均影响结果；系统探测值为访客可见参数，不等于商家广告配置。
+内部格式: lebench-internal-v0（不可直接导入乐在云）。
+========================================================================
+
+说明：本样例来自开发机 Windows 冒烟；正式验收请在 Linux VPS 复跑，预期 system=completed。
